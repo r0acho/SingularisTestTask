@@ -1,26 +1,26 @@
+using System.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Cronos;
 
 namespace SingularisTestTask;
 
-public class FolderWatcherService : IHostedService
+public class FolderWatcherService : IHostedService, IDisposable
 {
-    private readonly IConfiguration _configuration;
+    private readonly FolderWatcherConfiguration? _folderWatcherConfiguration;
     private readonly ILogger<FolderWatcherService> _logger;
     private FileSystemWatcher? _watcher;
-    
+    private CronExpression? _cronExpression;
+    private Timer _timer;
+
     private readonly List<string> _createdFiles = new();
     private readonly List<string> _updatedFiles = new();
     private readonly List<string> _deletedFiles = new();
 
-    private const string FolderDoesntExistError = "Указанная папка не существует";
-    private const string JsonFileDoesntExistError = "Конфигурационный файл appsettings.json не найден";
-    private const string PathNotFoundError = "Путь к папке не указан в конфигурационном файле";
-
     public FolderWatcherService(IConfiguration configuration, ILogger<FolderWatcherService> logger)
     {
-        _configuration = configuration;
+        _folderWatcherConfiguration = configuration.GetSection("FolderWatcher").Get<FolderWatcherConfiguration>();
         _logger = logger;
     }
     
@@ -28,20 +28,29 @@ public class FolderWatcherService : IHostedService
     {
         try
         {
-            string folderPath = _configuration["FolderWatcher:Path"] ?? throw new KeyNotFoundException();
-            SetupWatcher(folderPath);
+            CheckConfiguration();
+            _cronExpression = CronExpression.Parse(_folderWatcherConfiguration!.CronExpression);
+            _timer = new Timer(SetupWatcher, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
         }
-        catch (FileNotFoundException)
+        catch (ConfigurationErrorsException)
         {
-            _logger.LogError(JsonFileDoesntExistError);
+            _logger.LogError(ErrorMessage.JsonFileDoesntExistError);
         }
         catch (DirectoryNotFoundException)
         {
-            _logger.LogError(FolderDoesntExistError);
+            _logger.LogError(ErrorMessage.FolderDoesntExistError);
         }
-        catch (KeyNotFoundException)
+        catch (KeyNotFoundException ex)
         {
-            _logger.LogError(PathNotFoundError);
+            _logger.LogError($"{ErrorMessage.KeyNotFoundError} {ex.Message}");
+        }
+        catch (CronFormatException)
+        {
+            _logger.LogError(ErrorMessage.CantParseCronExpressionError);
+        }
+        catch (Exception)
+        {
+            _logger.LogCritical(ErrorMessage.UndefinedError);
         }
         
         return Task.CompletedTask;
@@ -49,39 +58,48 @@ public class FolderWatcherService : IHostedService
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation($"Добавленные файлы: {Environment.NewLine}");
-        foreach (var item in _createdFiles)
-        {
-            _logger.LogInformation(item);
-        }
-        
-        _logger.LogInformation($"Измененные файлы: {Environment.NewLine}");
-        foreach (var item in _updatedFiles)
-        {
-            _logger.LogInformation(item);
-        }
-        
-        _logger.LogInformation($"Удаленные файлы: {Environment.NewLine}");
-        foreach (var item in _deletedFiles)
-        {
-            _logger.LogInformation(item);
-        }
-        
         _watcher?.Dispose();
+
+        if (_createdFiles.Count > 0)
+        {
+            _logger.LogInformation($"{Environment.NewLine}Добавленные файлы: ");
+            foreach (var item in _createdFiles)
+            {
+                _logger.LogInformation(item);
+            }
+        }
+
+        if (_updatedFiles.Count > 0)
+        {
+            _logger.LogInformation($"{Environment.NewLine}Измененные файлы: ");
+            foreach (var item in _updatedFiles)
+            {
+                _logger.LogInformation(item);
+            }
+        }
+
+        if (_deletedFiles.Count > 0)
+        {
+            _logger.LogInformation($"{Environment.NewLine}Удаленные файлы: ");
+            foreach (var item in _deletedFiles)
+            {
+                _logger.LogInformation(item);
+            }
+        }
+
         return Task.CompletedTask;
     }
     
-    private void SetupWatcher(string folderPath)
+    private void SetupWatcher(object? state)
     {
-        if (!Directory.Exists(folderPath))
+        if (!Directory.Exists(_folderWatcherConfiguration!.Path))
         {
-            _logger.LogError(FolderDoesntExistError);
             throw new DirectoryNotFoundException();
         }
 
         _watcher = new FileSystemWatcher
         {
-            Path = folderPath,
+            Path = _folderWatcherConfiguration.Path,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
         };
 
@@ -93,6 +111,24 @@ public class FolderWatcherService : IHostedService
         _watcher.EnableRaisingEvents = true;
     }
 
+    private void CheckConfiguration()
+    {
+        if (_folderWatcherConfiguration == null)
+        {
+            throw new ConfigurationErrorsException();
+        }
+
+        if (_folderWatcherConfiguration.Path == null)
+        {
+            throw new KeyNotFoundException(ErrorMessage.PathNotFoundError);
+        }
+
+        if (_folderWatcherConfiguration.CronExpression == null)
+        {
+            throw new KeyNotFoundException(ErrorMessage.CronExpressionNotFoundError);
+        }
+    }
+    
     private void OnChange(object sender, FileSystemEventArgs e)
     {
         if (e.ChangeType == WatcherChangeTypes.Created)
@@ -110,5 +146,11 @@ public class FolderWatcherService : IHostedService
             _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Удален файл {e.FullPath}");
             _deletedFiles.Add(e.FullPath);
         }
+    }
+
+    public void Dispose()
+    {
+        _watcher?.Dispose();
+        _timer.Dispose();
     }
 }
