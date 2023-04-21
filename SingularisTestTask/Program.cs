@@ -11,8 +11,9 @@ var builder = Host.CreateDefaultBuilder(args)
     })
     .ConfigureServices((hostContext, services) =>
     {
+        services.Configure<FolderWatcherConfiguration>(hostContext.Configuration.GetSection("FolderWatcher"));
+        services.AddScoped<FolderWatcherJob>();
         services.AddHostedService<FolderWatcherService>();
         services.AddLogging();
     });
-
 await builder.RunConsoleAsync();
