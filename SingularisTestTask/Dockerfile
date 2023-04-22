@@ -1,18 +1,13 @@
-﻿FROM mcr.microsoft.com/dotnet/runtime:7.0 AS base
+﻿FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build-env
 WORKDIR /app
 
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
-WORKDIR /src
-COPY ["SingularisTestTask/SingularisTestTask.csproj", "SingularisTestTask/"]
-RUN dotnet restore "SingularisTestTask/SingularisTestTask.csproj"
-COPY . .
-WORKDIR "/src/SingularisTestTask"
-RUN dotnet build "SingularisTestTask.csproj" -c Release -o /app/build
+COPY *.csproj ./
+RUN dotnet restore
 
-FROM build AS publish
-RUN dotnet publish "SingularisTestTask.csproj" -c Release -o /app/publish
+COPY . ./
+RUN dotnet publish -c Release -o out
 
-FROM base AS final
+FROM mcr.microsoft.com/dotnet/runtime:7.0
 WORKDIR /app
-COPY --from=publish /app/publish .
+COPY --from=build-env /app/out .
 ENTRYPOINT ["dotnet", "SingularisTestTask.dll"]

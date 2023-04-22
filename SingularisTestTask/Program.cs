@@ -1,19 +1,27 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using SingularisTestTask;
+using SingularisTestTask.Services.Implementations;
+using SingularisTestTask.Services.Interfaces;
 
 var builder = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration((config) =>
     {
         config.SetBasePath(Directory.GetCurrentDirectory());
-        config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+        config.AddJsonFile("FolderSettings.json", optional: false, reloadOnChange: true);
+        foreach (var provider in config.Sources)
+        {
+            if (provider is FileConfigurationSource fileSource)
+            {
+                Console.WriteLine($"Loaded configuration file: {fileSource.Path}");
+            }
+        }
     })
-    .ConfigureServices((hostContext, services) =>
+    .ConfigureServices((services) =>
     {
-        services.Configure<FolderWatcherConfiguration>(hostContext.Configuration.GetSection("FolderWatcher"));
-        services.AddScoped<FolderWatcherJob>();
+        services.AddSingleton<IFolderWatcherSettingsService, FolderWatcherSettingsService>();
         services.AddHostedService<FolderWatcherService>();
         services.AddLogging();
     });
+
 await builder.RunConsoleAsync();

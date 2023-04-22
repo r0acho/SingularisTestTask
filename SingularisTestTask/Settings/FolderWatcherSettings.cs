@@ -1,6 +1,6 @@
-namespace SingularisTestTask;
+namespace SingularisTestTask.Settings;
 
-public class FolderWatcherConfiguration
+public class FolderWatcherSettings
 {
     public string? Path { get; set; }
     public string? CronExpression { get; set; }
