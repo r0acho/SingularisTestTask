@@ -4,18 +4,12 @@ using Microsoft.Extensions.Hosting;
 using SingularisTestTask.Services.Implementations;
 using SingularisTestTask.Services.Interfaces;
 
+
 var builder = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration((config) =>
     {
         config.SetBasePath(Directory.GetCurrentDirectory());
-        config.AddJsonFile("FolderSettings.json", optional: false, reloadOnChange: true);
-        foreach (var provider in config.Sources)
-        {
-            if (provider is FileConfigurationSource fileSource)
-            {
-                Console.WriteLine($"Loaded configuration file: {fileSource.Path}");
-            }
-        }
+        config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
     })
     .ConfigureServices((services) =>
     {
@@ -25,3 +19,5 @@ var builder = Host.CreateDefaultBuilder(args)
     });
 
 await builder.RunConsoleAsync();
+
+

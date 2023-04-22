@@ -1,9 +1,10 @@
+using NCrontab;
 using SingularisTestTask.Settings;
 
 namespace SingularisTestTask.Services.Interfaces;
 
 public interface IFolderWatcherSettingsService : IDisposable
 {
-    FolderWatcherSettings? GetSettings { get; }
+    CrontabSchedule? GetSchedule { get; }
     FileSystemWatcher GetWatcher { get; }
 }

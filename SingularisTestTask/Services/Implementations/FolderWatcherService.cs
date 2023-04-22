@@ -9,40 +9,62 @@ public class FolderWatcherService : IHostedService, IDisposable
 {
     private readonly IFolderWatcherSettingsService _settings;
     private readonly ILogger<FolderWatcherService> _logger;
-    
-    private readonly List<string> _createdFiles = new();
-    private readonly List<string> _updatedFiles = new();
-    private readonly List<string> _deletedFiles = new();
+    private Timer? _timer;
 
+    //использовал HashSet для фильтрации дубликатов
+    private readonly HashSet<string> _createdFiles = new();
+    private readonly HashSet<string> _updatedFiles = new();
+    private readonly HashSet<string> _deletedFiles = new();
+    
     public FolderWatcherService(IFolderWatcherSettingsService settings, ILogger<FolderWatcherService> logger)
     {
         _settings = settings;
         _logger = logger;
     }
-
     
-    /*private void WatcherHandler()
+    /// <summary>
+    /// Callback для таймера, осуществляющего ежесекундные проверки cron-расписания
+    /// </summary>
+    /// <param name="state"></param>
+    private void CronSchedulerOnTimerCheck(object? state)
     {
-        try
+        if (_settings.GetSchedule == null) return;
+        var nextRunTime = _settings.GetSchedule!.GetNextOccurrence(DateTime.Now);
+        var delay = nextRunTime - DateTime.Now;
+        if (delay > TimeSpan.FromMinutes(1) && _settings.GetWatcher.EnableRaisingEvents == true)//время ожидания больше одной минуты - спим до включения
         {
-            CrontabSchedule schedule = CrontabSchedule.Parse(_settings.GetSettings!.CronExpression);
-            DateTime nextRunTime = schedule.GetNextOccurrence(DateTime.Now);
-            TimeSpan delay = nextRunTime - DateTime.Now;
+            _logger.LogInformation($"Приложение спит до следующего включения мониторинга согласно cron-расписанию");
+            _settings.GetWatcher.EnableRaisingEvents = false;
         }
-        catch (CrontabException)
+        else if (delay <= TimeSpan.FromMinutes(1) && _settings.GetWatcher.EnableRaisingEvents == false) //время сна прошло, пора мониторить
         {
-            _logger.LogError(ErrorMessage.CantParseCronExpressionError);
+            _logger.LogInformation($"Запуск FolderWatcherService согласно расписанию");
+            _settings.GetWatcher.EnableRaisingEvents = true;
         }
-    }*/
+    }
     
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Запуск FolderWatcherService...");
-        SignWatcherEvents(_settings.GetWatcher);
-        _logger.LogInformation("FolderWatcherService запущен");
+        try
+        {
+            _logger.LogInformation("Запуск FolderWatcherService...");
+            _timer = new Timer(CronSchedulerOnTimerCheck, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+            SubscribeWatcherEvents(_settings.GetWatcher);
+            _logger.LogInformation("FolderWatcherService запущен");
+        }
+        catch (Exception)
+        {
+            _logger.LogError(ErrorMessage.DefaultMessage);
+        }
+
         return Task.CompletedTask;
     }
 
+    private TimeSpan GetSecondsToNextMinute()
+    {
+        return TimeSpan.FromSeconds(60 - DateTime.Now.Second);
+    }
+    
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Остановка FolderWatcherService...");
@@ -52,7 +74,11 @@ public class FolderWatcherService : IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
-    private void SignWatcherEvents(FileSystemWatcher watcher)
+    /// <summary>
+    /// Подписка на события создания, изменения и удаления в отслеживаемой папке
+    /// </summary>
+    /// <param name="watcher"></param>
+    private void SubscribeWatcherEvents(FileSystemWatcher watcher)
     {
         watcher.Created += OnChange;
         watcher.Changed += OnChange;
@@ -63,21 +89,25 @@ public class FolderWatcherService : IHostedService, IDisposable
     {
         if (e.ChangeType == WatcherChangeTypes.Created)
         {
-            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Добавлен файл {e.FullPath}");
-            _createdFiles.Add(e.FullPath);
+            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Добавлен файл {e.Name}");
+            _createdFiles.Add(e.Name!);
         }
         else if (e.ChangeType == WatcherChangeTypes.Changed)
         {
-            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Изменен файл {e.FullPath}");
-            _updatedFiles.Add(e.FullPath);
+            _logger.LogInformation($"{Thread.CurrentThread.ManagedThreadId}");
+            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Изменен файл {e.Name}");
+            _updatedFiles.Add(e.Name!);
         }
         else if (e.ChangeType == WatcherChangeTypes.Deleted)
         {
-            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Удален файл {e.FullPath}");
-            _deletedFiles.Add(e.FullPath);
+            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Удален файл {e.Name}");
+            _deletedFiles.Add(e.Name!);
         }
     }
 
+    /// <summary>
+    /// Логирование итогового списка созданных, измененных и редактированных файлов
+    /// </summary>
     private void LogFinalReport()
     {
         if (_createdFiles.Count > 0)
@@ -98,6 +128,7 @@ public class FolderWatcherService : IHostedService, IDisposable
 
     public void Dispose()
     {
+        _timer?.Dispose();
         _settings.Dispose();
     }
 }
