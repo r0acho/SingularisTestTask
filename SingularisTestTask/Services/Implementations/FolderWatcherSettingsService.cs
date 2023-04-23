@@ -56,7 +56,7 @@ public class FolderWatcherSettingsService : IFolderWatcherSettingsService
         }
         catch (ConfigurationErrorsException)
         {
-            _logger.LogError(ErrorMessage.JsonFileDoesntExistError);
+            _logger.LogError(ErrorMessage.SectionSettingsNotFoundError);
         }
         catch (DirectoryNotFoundException)
         {

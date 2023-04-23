@@ -38,6 +38,7 @@ public class FolderWatcherService : IHostedService, IDisposable
         }
         else if (delay <= TimeSpan.FromMinutes(1) && _settings.GetWatcher.EnableRaisingEvents == false) //время сна прошло, пора мониторить
         {
+            //Thread.Sleep(delay); //досыпаем до начала работы
             _logger.LogInformation($"Запуск FolderWatcherService согласно расписанию");
             _settings.GetWatcher.EnableRaisingEvents = true;
         }
@@ -48,8 +49,9 @@ public class FolderWatcherService : IHostedService, IDisposable
         try
         {
             _logger.LogInformation("Запуск FolderWatcherService...");
-            _timer = new Timer(CronSchedulerOnTimerCheck, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
             SubscribeWatcherEvents(_settings.GetWatcher);
+            _settings.GetWatcher.EnableRaisingEvents = true;
+            _timer = new Timer(CronSchedulerOnTimerCheck, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
             _logger.LogInformation("FolderWatcherService запущен");
         }
         catch (Exception)
@@ -83,6 +85,7 @@ public class FolderWatcherService : IHostedService, IDisposable
         watcher.Created += OnChange;
         watcher.Changed += OnChange;
         watcher.Deleted += OnChange;
+        watcher.Renamed += OnChange;
     }
     
     private void OnChange(object sender, FileSystemEventArgs e)
@@ -94,7 +97,6 @@ public class FolderWatcherService : IHostedService, IDisposable
         }
         else if (e.ChangeType == WatcherChangeTypes.Changed)
         {
-            _logger.LogInformation($"{Thread.CurrentThread.ManagedThreadId}");
             _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Изменен файл {e.Name}");
             _updatedFiles.Add(e.Name!);
         }
@@ -102,6 +104,14 @@ public class FolderWatcherService : IHostedService, IDisposable
         {
             _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Удален файл {e.Name}");
             _deletedFiles.Add(e.Name!);
+        }
+        else if (e.ChangeType == WatcherChangeTypes.Renamed)
+        {
+            var renamedArgs = (RenamedEventArgs)e;
+            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Удален файл {renamedArgs.OldName}");
+            _deletedFiles.Add(renamedArgs.OldName!);
+            _logger.LogInformation($"[{DateTime.Now:HH:mm:ss}] Добавлен файл {e.Name}");
+            _createdFiles.Add(e.Name!);
         }
     }
 

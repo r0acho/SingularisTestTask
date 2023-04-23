@@ -3,7 +3,7 @@ namespace SingularisTestTask;
 public static class ErrorMessage
 {
     public const string FolderDoesntExistError = "Указанная папка не существует";
-    public const string JsonFileDoesntExistError = "Раздел FolderWatcher не найден в файле конфигурации";
+    public const string SectionSettingsNotFoundError = "Раздел FolderWatcher не найден в файле конфигурации";
     public const string KeyNotFoundError = "Не найдено значение в конфигурационном файле: ";
     public const string CronExpressionNotFoundError = "cron-выражение не указано";
     public const string PathNotFoundError = "путь к папке не указан";
