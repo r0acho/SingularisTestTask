@@ -8,7 +8,7 @@ using SingularisTestTask.Settings;
 
 namespace SingularisTestTask.Services.Implementations;
 
-public class FolderWatcherSettingsService : IFolderWatcherSettingsService
+public sealed class FolderWatcherSettingsService : IFolderWatcherSettingsService
 {
     private readonly ILogger<FolderWatcherSettingsService> _logger;
     private readonly IDisposable _changeTokenRegistration;
@@ -18,14 +18,14 @@ public class FolderWatcherSettingsService : IFolderWatcherSettingsService
     private CrontabSchedule? _schedule;
     
     private const string ConfigFileEdited = "Конфигурационный файл изменен";
-
-    public FolderWatcherSettings? GetSettings => _settings;
-    public CrontabSchedule? GetSchedule => _schedule;
-    public FileSystemWatcher GetWatcher => _watcher;
+    private const string ConfigurationSection = "FolderWatcher";
+    
+    public CrontabSchedule? Schedule => _schedule;
+    public FileSystemWatcher Watcher => _watcher;
 
     public FolderWatcherSettingsService(IConfiguration configuration, ILogger<FolderWatcherSettingsService> logger)
     {
-        _settings = configuration.GetSection("FolderWatcher").Get<FolderWatcherSettings>(); //считываем секцию "FolderWatcher" из конфигурации
+        _settings = configuration.GetSection(ConfigurationSection).Get<FolderWatcherSettings>(); //считываем секцию из конфигурации
         _watcher = new FileSystemWatcher
         {
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
@@ -38,7 +38,7 @@ public class FolderWatcherSettingsService : IFolderWatcherSettingsService
             () =>
             {
                 _logger.LogInformation(ConfigFileEdited);
-                _settings = configuration.GetSection("FolderWatcher").Get<FolderWatcherSettings>();
+                _settings = configuration.GetSection(ConfigurationSection).Get<FolderWatcherSettings>();
                 SetWatcherSettings();
             });//перезагружаем конфигурацию в случае изменения настроек в файле и проверяем их на валидность
     }

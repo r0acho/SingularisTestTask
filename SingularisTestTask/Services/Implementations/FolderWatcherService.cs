@@ -5,7 +5,7 @@ using SingularisTestTask.Services.Interfaces;
 
 namespace SingularisTestTask.Services.Implementations;
 
-public class FolderWatcherService : IHostedService, IDisposable
+public sealed class FolderWatcherService : IHostedService, IDisposable
 {
     private readonly IFolderWatcherSettingsService _settings;
     private readonly ILogger<FolderWatcherService> _logger;
@@ -28,19 +28,18 @@ public class FolderWatcherService : IHostedService, IDisposable
     /// <param name="state"></param>
     private void CronSchedulerOnTimerCheck(object? state)
     {
-        if (_settings.GetSchedule == null) return;
-        var nextRunTime = _settings.GetSchedule!.GetNextOccurrence(DateTime.Now);
+        if (_settings.Schedule == null) return;
+        var nextRunTime = _settings.Schedule.GetNextOccurrence(DateTime.Now);
         var delay = nextRunTime - DateTime.Now;
-        if (delay > TimeSpan.FromMinutes(1) && _settings.GetWatcher.EnableRaisingEvents == true)//время ожидания больше одной минуты - спим до включения
+        if (delay > TimeSpan.FromMinutes(1) && _settings.Watcher.EnableRaisingEvents)//время ожидания больше одной минуты - спим до включения
         {
-            _logger.LogInformation($"Приложение спит до следующего включения мониторинга согласно cron-расписанию");
-            _settings.GetWatcher.EnableRaisingEvents = false;
+            _logger.LogInformation("Приложение спит до следующего включения мониторинга согласно cron-расписанию");
+            _settings.Watcher.EnableRaisingEvents = false;
         }
-        else if (delay <= TimeSpan.FromMinutes(1) && _settings.GetWatcher.EnableRaisingEvents == false) //время сна прошло, пора мониторить
+        else if (delay <= TimeSpan.FromMinutes(1) && _settings.Watcher.EnableRaisingEvents == false) //время сна прошло, пора мониторить
         {
-            //Thread.Sleep(delay); //досыпаем до начала работы
-            _logger.LogInformation($"Запуск FolderWatcherService согласно расписанию");
-            _settings.GetWatcher.EnableRaisingEvents = true;
+            _logger.LogInformation("Запуск FolderWatcherService согласно расписанию");
+            _settings.Watcher.EnableRaisingEvents = true;
         }
     }
     
@@ -49,8 +48,8 @@ public class FolderWatcherService : IHostedService, IDisposable
         try
         {
             _logger.LogInformation("Запуск FolderWatcherService...");
-            SubscribeWatcherEvents(_settings.GetWatcher);
-            _settings.GetWatcher.EnableRaisingEvents = true;
+            SubscribeWatcherEvents(_settings.Watcher);
+            _settings.Watcher.EnableRaisingEvents = true;
             _timer = new Timer(CronSchedulerOnTimerCheck, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
             _logger.LogInformation("FolderWatcherService запущен");
         }
@@ -69,10 +68,24 @@ public class FolderWatcherService : IHostedService, IDisposable
     
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Остановка FolderWatcherService...");
-        Dispose();
-        LogFinalReport();
-        _logger.LogInformation("FolderWatcherService остановлен.");
+        try
+        {
+            _logger.LogInformation("Остановка FolderWatcherService...");
+            Dispose();
+            LogFinalReport();
+            _logger.LogInformation("FolderWatcherService остановлен.");
+        }
+        catch (ObjectDisposedException)
+        {
+            _logger.LogError(ErrorMessage.ObjectDisposedError);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ErrorMessage.UndefinedError);
+            _logger.LogCritical(ex.Message);
+        }
+
+
         return Task.CompletedTask;
     }
 
