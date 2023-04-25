@@ -9,7 +9,7 @@ var builder = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration((config) =>
     {
         config.SetBasePath(Directory.GetCurrentDirectory());
-        config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+        config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true); //флаг optional выставлен потому что на Main try-catch лучше не ставить
     })
     .ConfigureServices((services) =>
     {
